@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs4315"
+authors = [
+    {name = "Bill N.", email = "bn66@users.noreply.github.com"},
+]
+description = "CS4315 Project"
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "requests",
+    "numpy",
+    "pandas",
+    "keras",
+    "jupyter",
+    "scikit-learn",
+]
+dynamic = ["version"]
+
+[project.urls]
+homepage = "https://github.com/bn66/CS4315_Project"
+
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "mypy",
+    "flake8",
+    "pylint",
+    "pydocstyle",
+]
