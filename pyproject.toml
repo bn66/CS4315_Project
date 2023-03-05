@@ -18,6 +18,9 @@ dependencies = [
     "keras",
     "jupyter",
     "scikit-learn",
+    "tensorflow",
+#    "selenium",
+#    "bs4",
 ]
 dynamic = ["version"]
 
@@ -32,4 +35,5 @@ dev = [
     "flake8",
     "pylint",
     "pydocstyle",
+    "pytest",
 ]
