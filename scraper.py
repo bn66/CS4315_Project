@@ -10,6 +10,7 @@ TODO:
 from typing import TYPE_CHECKING
 from typing import Dict, Tuple, List, Set, Optional
 from pathlib import Path
+import threading
 
 import numpy as np
 import pandas as pd
@@ -29,61 +30,40 @@ if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
 
 
-class Scraper:
-    """Scraper.
+class ScrapeThread(threading.Thread):
+    """Scraper thread for multi-threading."""
 
-    Attributes:
-        self.icao_list: Array of icaos
-        self.completed_icao: Completed ICAOs
-        self.df_old: Optional Data Frame of old output, for continuation
-        self.df_old_completed: Set of completed searches
-        self.errors: Old Errors
-        self.data_dict: Dictionary of with Column names mapped to indices for
-            the table that is to be parsed.
-    """
+    url: str = "https://www.planespotters.net/hex/{}"
+    # url: str = "http://webcache.googleusercontent.com/search?q=cache:https://www.planespotters.net/hex/{}"
 
-    url: str = "https://www.planespotters.net/hex/{}"  # Bypass bot
-    # http://webcache.googleusercontent.com/search?q=cache:https://www.planespotters.net/hex/888152
-    # url: str = 'https://opensky-network.org/aircraft-profile?icao24={}'  # No Plane information
-    # url: str = 'http://www.airframes.org/'  # No Plane information
-    # https://www.airport-data.com/aircraft/N900GX.html
-    output_file: Path = DATA_DIR / "scraped_data.csv"
-    output_icao_key: str = "ICAO24"
-    error_file: Path = DATA_DIR / "scraped_data_errors.txt"
-
-    def __init__(self, icao_path: Path):
+    def __init__(self, icao_list: Set[str], output_path: Path) -> None:
         """Init.
 
         Args:
-            icao_path: Path to a file with unique ICAOs
+            icao_list: ICAOs to iterate over in this thead.
         """
-        self.icao_list: np.ndarray = np.loadtxt(icao_path, dtype=str)
+        super().__init__()
+        self.icao_list: Set[str] = icao_list
         self.completed_icao: Set[str] = set()
 
-        # Read in old data for continuing
-        self.df_old: Optional[pd.DataFrame] = self.read_old_output_file()
-        self.df_old_completed: Set[str] = set()
-        if self.df_old is not None:
-            self.df_old_completed = set(self.df_old[self.output_icao_key])
-
-        self.errors: Set[str] = self.read_old_error_file()
+        self.output_file: Path = output_path
+        self.errors: Set[str] = set()
 
         # data_dict["HEADER"] = (column_index, data_list)
         self.data_dict: Dict[str, Tuple[int, List[str]]] = {
-            "REGISTRATION": tuple([2, []]),
-            "MANUFACTURER_SERIAL_NUMBER": tuple([3, []]),
-            "AIRCRAFT_TYPE": tuple([4, []]),
-            "AIRLINE": tuple([5, []]),
-            "DELIVERED": tuple([6, []]),
-            "STATUS": tuple([7, []]),
-            "PREVIOUS_REGISTRATION": tuple([8, []]),
+            "REGISTRATION": tuple([2, []]),  # type: ignore
+            "MANUFACTURER_SERIAL_NUMBER": tuple([3, []]),  # type: ignore
+            "AIRCRAFT_TYPE": tuple([4, []]),  # type: ignore
+            "AIRLINE": tuple([5, []]),  # type: ignore
+            "DELIVERED": tuple([6, []]),  # type: ignore
+            "STATUS": tuple([7, []]),  # type: ignore
+            "PREVIOUS_REGISTRATION": tuple([8, []]),  # type: ignore
             # "REMARK": tuple(9, []),
         }
 
-    def main(self) -> None:
-        """Main."""
-        breakpoint()
-        options = Options()
+    def run(self) -> None:
+        """Run Scraper Thread."""
+        options: Options = Options()
         # options.add_argument('--headless')
         driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()), options=options
@@ -93,27 +73,19 @@ class Scraper:
         icao24: str
         x_path_base: str = '//*[@id="content"]/div/div[2]/div[2]/div[{}]'
         # Scan "Current Registration Records table"
-        no_element_found: bool = False
-        for i, icao24 in enumerate(self.data_df["icao24"]):
+        for i, icao24 in enumerate(self.icao_list):
             if i > 0:  # Back up files every 1000
                 if (i % 1000) == 0:
-                    print(f"Backing up files! i={i}")
-                    self.export_data_dict()
+                    print(f"At #{i}")
+            #         print(f"Backing up files! i={i}")
+            #         self.export_data_dict()
 
-            if icao24 in self.df_old_completed:
-                print(f"{icao24} found in old file! Skipping!")
-                continue
-            elif icao24 in self.completed_icao:
-                print(f"{icao24} already found! Skipping!")
-                continue
-            elif icao24 in self.errors:
-                print(f"{icao24} was an error! Skipping!")
-                continue
+            self.completed_icao.add(icao24)
 
-            self.completed_icao[icao24] = None
             driver.get(self.url.format(icao24.upper()))
 
-            # Check if Captcha
+            # Check on webpage title to see if correct webpage
+            correct_title: str = f"{icao24.upper()} Mode S Code | Aircraft Data"
             if driver.title == "Please verify your request":
                 print("CAPTCHA DETECTED, PLEASE CHECK BROWSER!")
                 breakpoint()
@@ -123,7 +95,11 @@ class Scraper:
             elif driver.title == "Data Limit Reached":
                 print("Oh hey you mined too much data! Should stop.")
                 breakpoint()
+            elif driver.title != correct_title:
+                print("Unexpected webpage happened!")
+                breakpoint()
 
+            # For a given webpage, iterate over the table
             values: Tuple[int, List[str]]
             for values in self.data_dict.values():
                 # Unpack Values
@@ -132,27 +108,127 @@ class Scraper:
 
                 # Mine Data
                 x_path: str = x_path_base.format(col)
+                value: str
                 try:
                     element: WebElement = driver.find_element(By.XPATH, x_path)
+                    value = element.text
                 except NoSuchElementException:
-                    print(f"NoSuchElementException for {icao24}!")
+                    # print(f"NoSuchElementException for {icao24} on col {col}")
                     self.errors.add(icao24)
-                    no_element_found = True
-                    break
+                    value = ""
 
-                value: str = element.text
-                data_list.append(value)
+                # Finally, add stuff to table
                 # print(col, value)
+                data_list.append(value)
 
-            if no_element_found:
-                no_element_found = False
-                continue
+        self.data_dict["ICAO24"] = list(self.completed_icao)
 
-        # Finally, Export Data
-        breakpoint()
-        self.export_data_dict()
 
-        # Export errors
+class Scraper:
+    """Scraper.
+
+    Attributes:
+        self.icao_list: Array of icaos imported from a file
+        self.completed_icao: Completed ICAOs
+        self.df_old: Optional Data Frame of old output, for continuation
+        self.completed_old: Set of completed searches
+        self.errors: Old Errors
+        self.data_dict: Dictionary of with Column names mapped to indices for
+            the table that is to be parsed.
+    """
+
+    # url: str = 'https://opensky-network.org/aircraft-profile?icao24={}'  # No Plane information
+    # url: str = 'http://www.airframes.org/'  # No Plane information
+    # https://www.airport-data.com/aircraft/N900GX.html
+    output_file: Path = DATA_DIR / "scraped_data.csv"
+    output_icao_key: str = "ICAO24"
+    error_file: Path = DATA_DIR / "scraped_data_errors.txt"
+
+    def __init__(self, icao_path: Path, threads: int = 1):
+        """Init.
+
+        Args:
+            icao_path: Path to a file with unique ICAOs
+            threads: Number of threads to use for multithreading
+        """
+        self.icao_list: Set[str] = set(np.loadtxt(icao_path, dtype=str))
+        self.completed_icao: Set[str] = set()
+        self.threads: int = threads
+
+        # Read in old data for continuing
+        self.df_old: Optional[pd.DataFrame] = self.read_old_output_file()
+        self.completed_old: Set[str] = set()
+        if self.df_old is not None:
+            self.completed_old = set(self.df_old[self.output_icao_key])
+
+        self.errors: Set[str] = self.read_old_error_file()
+
+        # Remove already completed entries
+        print(
+            f"Started with {len(self.icao_list)} icao entries, removing ",
+            f"{len(self.completed_old)} entries from old output and",
+            f"{len(self.errors)} entries from error file",
+        )
+        self.icao_list -= self.completed_old
+        self.icao_list -= self.errors
+        print(f"New icao length: {len(self.icao_list)}")
+
+        # data_dict["HEADER"] = (column_index, data_list)
+        self.data_dict: Dict[str, Tuple[int, List[str]]] = {
+            "REGISTRATION": tuple([2, []]),  # type: ignore
+            "MANUFACTURER_SERIAL_NUMBER": tuple([3, []]),  # type: ignore
+            "AIRCRAFT_TYPE": tuple([4, []]),  # type: ignore
+            "AIRLINE": tuple([5, []]),  # type: ignore
+            "DELIVERED": tuple([6, []]),  # type: ignore
+            "STATUS": tuple([7, []]),  # type: ignore
+            "PREVIOUS_REGISTRATION": tuple([8, []]),  # type: ignore
+            # "REMARK": tuple(9, []),
+        }
+
+    def run(self) -> None:
+        """Run."""
+        # Split ICAO ids into n-even sets.
+        icao_partitions: List[np.ndarray] = np.array_split(
+            np.array(list(self.icao_list), dtype=str), self.threads
+        )
+
+        threads: List[ScrapeThread] = []
+        i: int
+        partition: np.ndarray
+        for i, partition in enumerate(icao_partitions):
+            icao_list: List[str] = set(partition.tolist())
+            path: Path = self.output_file.parent
+            output_name: str = (
+                f"{self.output_file.stem}_thread{i+1}{self.output_file.suffix}"
+            )
+            full_output_path: Path = path / output_name
+            thread: ScrapeThread = ScrapeThread(icao_list, full_output_path)
+            thread.start()
+            threads.append(thread)
+
+        # Wait for all threads to finish.
+        for thread in threads:
+            thread.join()
+
+        # Combine and output thread data_dict, need to break this into function
+        df_list: List[pd.DataFrame] = []
+        for thread in threads:
+            # Create a dictionary only with 'ColumnName' to DataValues
+            key: str
+            value: Tuple[int, List[str]]
+            new_dict: Dict[str, List[str]] = {
+                key: value[1] for key, value in thread.data_dict.items()
+            }
+            df_thread: pd.DataFrame = pd.DataFrame.from_dict(new_dict)
+            df_list.append(df_thread)
+
+        df_out: pd.DataFrame = pd.concat(df_list)
+        df_out.to_csv(self.output_file)
+
+        # Combine errors from each thread and output
+        for thread in threads:
+            self.errors.update(thread.errors)
+
         self.export_errors()
 
     def export_data_dict(self) -> None:
@@ -165,10 +241,7 @@ class Scraper:
         # df_padded = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in new_dict.items() ]))
 
         # Remove Error keys
-        icao: str
-        for icao in self.errors:
-            del self.completed_icao[icao]
-        new_dict[self.output_icao_key] = list(self.completed_icao.keys())
+        new_dict[self.output_icao_key] = list(self.completed_icao)
 
         df_new: pd.DataFrame = pd.DataFrame.from_dict(new_dict)
         df_out: pd.DataFrame = pd.concat([self.df_old, df_new])
@@ -193,15 +266,11 @@ class Scraper:
 
     def read_old_error_file(self) -> Set[str]:
         """Read the old error file."""
+        error_set: Set[str] = set()
         if self.error_file.exists():
-            error_set: Set[str] = set()
-            with open(self.error_file, "r", encoding="utf-8") as f_in:
-                line: str
-                for line in f_in:
-                    error_set.add(line.rstrip())
-            return error_set
-        else:
-            return set()
+            error_set = set(np.loadtxt(self.error_file, dtype=str))
+
+        return error_set
 
 
 def unique_icao_from_dataset(datapath: Path) -> Path:
@@ -229,7 +298,8 @@ if __name__ == "__main__":
     dataset: Path = DATA_DIR / "flightlist_20190101_20190131.csv"
     # dataset_test: Path = DATA_DIR / "flightlist_short.csv"
 
-    icao_list: Path = unique_icao_from_dataset(dataset)
+    icao_set: Path = unique_icao_from_dataset(dataset)
+    # icao_set: Path = DATA_DIR / "unique_icao_list_test.txt"
 
-    scraper: Scraper = Scraper(icao_list)
-    scraper.main()
+    scraper: Scraper = Scraper(icao_set, threads=4)
+    scraper.run()

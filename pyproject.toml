@@ -12,14 +12,15 @@ readme = "README.md"
 requires-python = ">=3.8"
 
 dependencies = [
-    "requests",
+#    "requests",
     "numpy",
     "pandas",
     "keras",
     "jupyter",
     "scikit-learn",
     "tensorflow",
-#    "selenium",
+    "selenium",
+    "matplotlib",
 #    "bs4",
 ]
 dynamic = ["version"]
