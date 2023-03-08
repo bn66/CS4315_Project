@@ -1,6 +1,6 @@
 """Prepare data for model.
 
-head -n 201 data/prepared_data.csv > data/prepared_data_short.csv 
+head -n 201 data/prepared_data.csv > data/prepared_data_short.csv
 """
 from typing import List, Set
 from pathlib import Path
@@ -10,38 +10,6 @@ from numpy import radians, cos, sin, arcsin, sqrt
 import pandas as pd
 
 from common import DATA_DIR, TYPE_CODE_MAP
-
-
-# from math import radians, cos, sin, asin, sqrt
-# def distance(lat1, lat2, lon1, lon2):
-#     # The math module contains a function named
-#     # radians which converts from degrees to radians.
-#     lon1 = radians(lon1)
-#     lon2 = radians(lon2)
-#     lat1 = radians(lat1)
-#     lat2 = radians(lat2)
-
-#     # Haversine formula
-#     dlon = lon2 - lon1
-#     dlat = lat2 - lat1
-#     a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-
-#     c = 2 * asin(sqrt(a))
-
-#     # Radius of earth in kilometers. Use 3956 for miles
-#     r = 6371
-
-#     # calculate the result
-#     return c * r
-
-
-# dist = distance(
-#     lat1=-37.659485,
-#     lon1=144.804421,
-#     lat2=48.995316,
-#     lon2=2.610802,
-# )
-# breakpoint()
 
 
 def lat_long_distance(
@@ -114,12 +82,12 @@ def main(datapath: Path) -> None:
     series_callsign: pd.Series = df_data["callsign"]
     callsign_txt: List[str] = []
     callsign: str
-    digits: Set[str] = set(["1", "2", "3", "4", "5", "6", "7", "8", "9"])
+    # digits: Set[str] = set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
     for callsign in series_callsign:
-        char: str
-        new_txt: str = "".join([char for char in callsign if char not in digits])
+        # char: str
+        # new_txt: str = "".join([char for char in callsign if char not in digits])
+        new_txt: str = callsign[:3]  # Check if first three characters are letters?
         callsign_txt.append(new_txt)
-
     df_data["callsign_txt"] = callsign_txt
 
     # Calculate Distance
@@ -131,10 +99,29 @@ def main(datapath: Path) -> None:
     )
     df_data["great_circle_distance"] = distance
 
+    # Put Origin and Destination Together
+    array_route: pd.DataFrame = df_data[["origin", "destination"]].to_numpy()
+    route: List[str] = []
+    pair: np.ndarray
+    for pair in array_route:
+        from_to: str
+        if pd.isna(pair).any():
+            from_to = ""
+        else:
+            pair_list: List[str] = pair.tolist()
+            pair_list.sort()
+            from_to = "-".join(pair_list)
+
+        route.append(from_to)
+
+    df_data["route"] = route
+
     # Finally, output
     df_data.to_csv(DATA_DIR / "prepared_data.csv")
+    df_data.iloc[:200].to_csv(DATA_DIR / "prepared_data_short.csv")
 
 
 if __name__ == "__main__":
     dataset: Path = DATA_DIR / "flightlist_20190101_20190131.csv"
+    # dataset: Path = DATA_DIR / "flightlist_short.csv"
     main(dataset)
