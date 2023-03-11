@@ -1,7 +1,4 @@
-"""Prepare data for model.
-
-head -n 201 data/prepared_data.csv > data/prepared_data_short.csv
-"""
+"""Prepare data for model."""
 from typing import List, Set
 from pathlib import Path
 
@@ -9,7 +6,7 @@ import numpy as np
 from numpy import radians, cos, sin, arcsin, sqrt
 import pandas as pd
 
-from common import DATA_DIR, TYPE_CODE_MAP
+from common import DATA_DIR, TYPE_CODE_MAP, TYPE_CODE_MAP_SIMPLE
 
 
 def lat_long_distance(
@@ -18,10 +15,14 @@ def lat_long_distance(
     """Calculate Distance between two points on lat/long
 
     Args:
-        ...
+        lat1: Numpy array of starting latitude, in decimal degrees
+        long1: Numpy array of starting longitude, in decimal degrees
+        lat2: Numpy array of end latitude, in decimal degrees
+        long2: Numpy array of end longitude, in decimal degrees
 
     Returns:
-        Result of Haversine formula for distance between two points
+        Result of Haversine formula for distance between two points in km,
+            also known as the great circle distance.
 
     Sources:
         https://en.wikipedia.org/wiki/Great-circle_distance
@@ -51,20 +52,12 @@ def lat_long_distance(
     return result
 
 
-def main(datapath: Path) -> None:
-    """Prepare data to model.
-
-    Add airplane type based off look-up table.
+def _add_airplane_type(df_data: pd.DataFrame) -> None:
+    """Based on typecode, add airplane_type.
 
     Args:
-        datapath: Path to data.
-
-    Returns:
-        Writes data to 'prepared_data.csv'
+        df_data: DataFrame of flight information.
     """
-    df_data: pd.DataFrame = pd.read_csv(datapath)
-
-    # Based on typecode, add airplane_type
     series_typecode: pd.Series = df_data["typecode"]
     airplane_types: List[str] = []
     typecode: str
@@ -78,27 +71,34 @@ def main(datapath: Path) -> None:
 
     df_data["airplane_type"] = airplane_types
 
-    # Split Call Sign into Text only
+
+def _callsign_txt_only(df_data: pd.DataFrame) -> None:
+    """Take the first three characters callsign, to identify airline.
+
+    Args:
+        df_data: DataFrame of flight information.
+    """
     series_callsign: pd.Series = df_data["callsign"]
     callsign_txt: List[str] = []
     callsign: str
-    # digits: Set[str] = set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+    digits: Set[str] = set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
     for callsign in series_callsign:
-        # char: str
-        # new_txt: str = "".join([char for char in callsign if char not in digits])
-        new_txt: str = callsign[:3]  # Check if first three characters are letters?
-        callsign_txt.append(new_txt)
+        char: str
+        new_txt: str = "".join([char for char in callsign[:3] if char not in digits])
+        if len(new_txt) < 3:
+            new_txt = ""
+        else:
+            callsign_txt.append(new_txt)
+
     df_data["callsign_txt"] = callsign_txt
 
-    # Calculate Distance
-    distance: np.ndarray = lat_long_distance(
-        lat1=df_data["latitude_1"],
-        lat2=df_data["latitude_2"],
-        long1=df_data["longitude_1"],
-        long2=df_data["longitude_2"],
-    )
-    df_data["great_circle_distance"] = distance
 
+def _concat_origin_destination(df_data: pd.DataFrame) -> None:
+    """Combine origin and destination names into one.
+
+    Args:
+        df_data: DataFrame of flight information.
+    """
     # Put Origin and Destination Together
     array_route: pd.DataFrame = df_data[["origin", "destination"]].to_numpy()
     route: List[str] = []
@@ -106,6 +106,8 @@ def main(datapath: Path) -> None:
     for pair in array_route:
         from_to: str
         if pd.isna(pair).any():
+            from_to = ""
+        elif pair[0] == pair[1]:  # Origin and destination same, plane didn't move
             from_to = ""
         else:
             pair_list: List[str] = pair.tolist()
@@ -115,6 +117,39 @@ def main(datapath: Path) -> None:
         route.append(from_to)
 
     df_data["route"] = route
+
+
+def main(datapath: Path) -> None:
+    """Prepare data for model.
+
+    Adds the following:
+        airplane type based off look-up table.
+        reduce callsigns to first three letters
+        calculate distance between origin and destination
+        concatenate names of origin and destination
+
+
+    Args:
+        datapath: Path to data.
+
+    Returns:
+        Writes data to 'prepared_data.csv'
+            and a truncated version 'prepared_data_short.csv'
+    """
+    df_data: pd.DataFrame = pd.read_csv(datapath)
+
+    _add_airplane_type(df_data)
+    _callsign_txt_only(df_data)
+    _concat_origin_destination(df_data)
+
+    # Calculate Distance
+    distance: np.ndarray = lat_long_distance(
+        lat1=df_data["latitude_1"],
+        lat2=df_data["latitude_2"],
+        long1=df_data["longitude_1"],
+        long2=df_data["longitude_2"],
+    )
+    df_data["great_circle_distance"] = distance
 
     # Finally, output
     df_data.to_csv(DATA_DIR / "prepared_data.csv")
