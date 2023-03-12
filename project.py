@@ -18,7 +18,7 @@ from sklearn.metrics import (
     classification_report,
 )
 
-from common import DATA_DIR
+from common import DATA_DIR, PLOT_DIR
 
 
 class Model:
@@ -59,7 +59,6 @@ class Model:
         self.y_array_vectorized = [self.y_class_names_map[i] for i in self.y_train]
     """
 
-    breakpoint()  ## Read only columns you want, read only data you want, dtypes speedup
     name: Optional[str] = None
 
     # Select x/features to use
@@ -73,7 +72,7 @@ class Model:
     x_feature_names: List[str] = x_feature_floats + x_feature_strings
 
     # Select y/prediction
-    y_predict_name: str = "airplane_type"
+    y_label_name: str = "airplane_type"
     # y_name: str = "typecode"
 
     def __init__(self, prepared_dataset: Path):
@@ -87,26 +86,24 @@ class Model:
             ensemble.RandomForestClassifier,
             ensemble.ExtraTreesClassifier,
         ]
-        # Read in all data.
-        df_full: pd.DataFrame = pd.read_csv(prepared_dataset, index_col=0)
+        xy_list: List[str] = self.x_feature_names + [self.y_label_name]
 
-        # Make DataFrame only of data we need, with the predictor last
-        xy_list: List[str] = self.x_feature_names + [self.y_predict_name]
-        self.df_xy: pd.DataFrame = df_full.loc[:, xy_list]
-        self.df_xy = self.df_xy.dropna()  # Remove NaN for now, worry later
+        # Read in data.
+        df_xy: pd.DataFrame = pd.read_csv(prepared_dataset, usecols=xy_list)
+        self.df_xy = df_xy.dropna()  # Remove NaN for now, worry later
 
         # Store X/Y Data Frames
         self.x_features: pd.DataFrame = self.df_xy.iloc[:, :-1]
-        self.y_predict: pd.Series = self.df_xy[self.y_predict_name]
+        self.y_labels: pd.Series = self.df_xy[self.y_label_name]
 
         # Convert X/Y to arrays for input
         self.encoder: OneHotEncoder = OneHotEncoder()
         self.x_array: np.ndarray = self._create_x_array()
-        self.y_array: np.ndarray = self.y_predict.to_numpy()
+        self.y_array: np.ndarray = self.y_labels.to_numpy()
 
         # Create Names of columns
         self.x_names: List[str] = self._create_x_class_names()
-        self.y_names: List[str] = np.unique(self.y_predict).tolist()
+        self.y_names: List[str] = np.unique(self.y_labels).tolist()
 
         # Split into training and test sets
         x_train, x_test, y_train, y_test = train_test_split(
@@ -173,9 +170,16 @@ class Model:
     def main(self) -> None:
         """Main."""
         self.define_model()  # Define Model to be used
-        self.fit_model()  # Fit Model
-        # Post-visualize data
-        # Save
+        print("~~~ Fitting model ~~~")
+        self.fit_model()  # Fit Model and visualize tree
+        print("~~~ Evaluating Model ~~~")
+        self.evaluate_model()  # Test/Predict, visualize results
+        # Save, Pickling?
+
+    def savefig(self, ptype: str, **kwargs) -> None:
+        """Save Figure."""
+        plt.savefig(PLOT_DIR / f"{self.name}_{ptype}.png", **kwargs)
+        plt.clf()
 
     @abstractmethod
     def define_model(self) -> None:
@@ -183,7 +187,54 @@ class Model:
 
     @abstractmethod
     def fit_model(self) -> None:
-        """Run model.fit()."""
+        """Run model.fit(). Override with child class and add visualization."""
+        self.model.fit(self.x_train, self.y_train)
+
+    def evaluate_model(self) -> None:
+        """Use test set with model.predict and visualize results."""
+        y_predict: np.ndarray = self.model.predict(self.x_test)
+
+        # Use Confusion Matrix as visualization metric
+        cf_mat: np.ndarray = confusion_matrix(self.y_test, y_predict)
+        y_labels: np.ndarray = np.unique(np.hstack([self.y_test, y_predict]))
+        disp: ConfusionMatrixDisplay = ConfusionMatrixDisplay(
+            confusion_matrix=cf_mat, display_labels=y_labels
+        )
+        disp.plot(cmap=plt.cm.Greens)
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        self.savefig("confusion_matrix")
+
+        # Print out test for report.
+        report: str = classification_report(
+            self.y_test, y_predict, target_names=y_labels
+        )
+        tf_compare: np.ndarray = y_predict == self.y_test
+        true_false: np.ndarray
+        counts: np.ndarray
+        true_false, counts = np.unique(tf_compare, return_counts=True)
+        i: int
+        tf: np.bool_  # pylint: ignore=invalid-name
+        with open(PLOT_DIR / f"{self.name}_report.txt", "w", encoding="utf-8") as f_out:
+            f_out.write(report)
+            f_out.write(",".join([str(tf) for tf in true_false.tolist()]) + "\n")
+            f_out.write(",".join([str(i) for i in counts.tolist()]) + "\n")
+            for i, tf in enumerate(tf_compare):
+                txt: str = ",".join(
+                    [str(self.y_test[i]), str(y_predict[i]), str(tf), "\n"]
+                )
+                f_out.write(txt)
+
+        breakpoint()
+        # from sklearn.model_selection import cross_val_score
+
+        # arr1, arr2 = np.unique(self.y_array, return_counts=True)
+        # thing = {i: j for i, j in zip(arr1, arr2)}
+        # cv_mse = np.mean(cross_val_score(model, self.x_array, self.y_array, cv=10))
+
+        # print("Cross-validated MSE: {}".format(cv_mse))
+
+        # return {'loss':cv_mse, 'status': STATUS_OK, 'model': model }
 
 
 class DecisionTreeModel(Model):
@@ -197,72 +248,17 @@ class DecisionTreeModel(Model):
         )
 
     def fit_model(self) -> None:
-        """Fit the model."""
-        # from sklearn.model_selection import cross_val_score
-
-        # arr1, arr2 = np.unique(self.y_array, return_counts=True)
-        # thing = {i: j for i, j in zip(arr1, arr2)}
-        # cv_mse = np.mean(cross_val_score(model, self.x_array, self.y_array, cv=10))
-
-        # print("Cross-validated MSE: {}".format(cv_mse))
-
-        # return {'loss':cv_mse, 'status': STATUS_OK, 'model': model }
-        breakpoint()
-
-        self.model.fit(self.x_train, self.y_train)
-        y_predict = self.model.predict(self.x_test)
-        yt_unique = np.unique(np.hstack([self.y_test, y_predict]))
-        bool_compare = y_predict == self.y_test
-        # accuracy = np.unique(cool_compare, return_counts=True)
-
-        for i in range(0, len(bool_compare)):
-            print(self.y_test[i], y_predict[i], bool_compare[i])
-        # Confusion Matrix, for accuracy
-        breakpoint()
-        cm = confusion_matrix(self.y_test, y_predict)
-
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=yt_unique)
-        disp.plot(cmap=plt.cm.Greens)
-        plt.xticks(rotation=90)
-        plt.savefig("decision_tree_confusion_matrix.jpg", dpi=2400)
-
-        print(classification_report(self.y_test, y_predict, target_names=yt_unique))
-
-        breakpoint()
+        """Fit and visualize."""
+        super().fit_model()
 
         # Visualize
-        # tree.plot_tree(
-        #     model,
-        #     feature_names=self.x_class_names,
-        #     class_names=self.y_class_names,
-        #     impurity=True,
-        # )
-        # plt.savefig("decision_tree_scatter.jpg", dpi=2400)
-
-        # # Visualize as scatter plot
-        # constant_y: np.ndarray = np.zeros((self.x_train.shape[0]))
-        # fig, ax = plt.subplots()
-        # for name in self.y_class_names:
-        #     idx = np.where(name == self.y_train)
-
-        #     ax.scatter(
-        #         self.x_train[idx, 0],
-        #         constant_y[idx],
-        #         c=self.c_dict_map[name],
-        #         cmap=plt.cm.Set1,
-        #         edgecolor="k",
-        #     )
-
-        # ax.legend(
-        #     self.y_class_names,
-        #     loc="upper center",
-        #     bbox_to_anchor=(0.5, 0.3),
-        #     fancybox=True,
-        #     ncol=2,
-        # )
-
-        # plt.savefig("decision_tree_scatter.jpg", dpi=2400)
-        # breakpoint()
+        tree.plot_tree(
+            self.model,
+            feature_names=self.x_names,
+            class_names=self.y_names,
+            impurity=True,
+        )
+        self.savefig("tree", dpi=2400)  # High res to see tree
 
 
 class RandomForestModel(Model):
@@ -292,5 +288,4 @@ if __name__ == "__main__":
     dataset: Path = DATA_DIR / "prepared_data_short.csv"
 
     decision_tree: DecisionTreeModel = DecisionTreeModel(dataset)
-    decision_tree.visualize_input_data()
     decision_tree.main()

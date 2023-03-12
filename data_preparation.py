@@ -236,7 +236,7 @@ class Visualize:
         axs[1].axis("off")
         axs[0].set_yticks(())  # Turn off
         plt.savefig(
-            PLOT_DIR / f"{self.name_stem}_scatter_label_vs_distance.jpg", dpi=2400
+            PLOT_DIR / f"{self.name_stem}_scatter_label_vs_distance.png", dpi=2400
         )
 
     def plot_histograms_all(self) -> None:
@@ -282,7 +282,7 @@ class Visualize:
             plt.xticks(rotation=90)
             plt.xlabel(col_name)
             plt.tight_layout()
-            plt.savefig(PLOT_DIR / f"histogram_{col_name}.jpg")
+            plt.savefig(PLOT_DIR / f"histogram_{col_name}.png")
             plt.clf()
 
         df_out: pd.DataFrame = pd.DataFrame(arrays_out)
@@ -302,9 +302,9 @@ class Visualize:
 
 
 if __name__ == "__main__":
-    # dataset: Path = DATA_DIR / "flightlist_20190101_20190131.csv"
-    # # dataset: Path = DATA_DIR / "flightlist_short.csv"
-    # main(dataset)
+    dataset: Path = DATA_DIR / "flightlist_20190101_20190131.csv"
+    # dataset: Path = DATA_DIR / "flightlist_short.csv"
+    main(dataset)
 
     prepared_dataset: Path = DATA_DIR / "prepared_data.csv"
     # prepared_dataset: Path = DATA_DIR / "prepared_data_short.csv"
