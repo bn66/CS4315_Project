@@ -1,9 +1,10 @@
 """Common things in project."""
-from typing import Dict
+from typing import Dict, Any, List
 from pathlib import Path
 
 ROOT: Path = Path(__file__).parent.absolute()
 DATA_DIR: Path = ROOT / "data"
+PLOT_DIR: Path = ROOT / "plots"
 
 # From https://en.wikipedia.org/wiki/List_of_aircraft_type_designators
 TYPE_CODE_MAP: Dict[str, str] = {
@@ -137,7 +138,7 @@ TYPE_CODE_MAP: Dict[str, str] = {
     "B788": "Boeing 787-8",
     "B789": "Boeing 787-9",
     "B78X": "Boeing 787-10",
-    "BA11": "British Aerospace (BAC) One Eleven",
+    # "BA11": "British Aerospace (BAC) One Eleven",
     "BCS1": "Airbus A220-100",
     "BCS3": "Airbus A220-300",
     "BE40": "Hawker 400",
@@ -351,7 +352,7 @@ TYPE_CODE_MAP_SIMPLE: Dict[str, str] = {
     "A321": "Airbus A321",
     "A332": "Airbus A330-200",
     "A333": "Airbus A330-300",
-    "A337": 'Airbus A330-700 "BelugaXL"',
+    # "A337": 'Airbus A330-700 "BelugaXL"',
     "A338": "Airbus A330-800",
     "A339": "Airbus A330-900",
     "A342": "Airbus A340-200",
@@ -361,8 +362,8 @@ TYPE_CODE_MAP_SIMPLE: Dict[str, str] = {
     "A359": "Airbus A350-900",
     "A35K": "Airbus A350-1000",
     "A388": "Airbus A380-800",
-    "A3ST": 'Airbus A300-600ST "Super Transporter" / "Beluga"',
-    "A400": "Airbus A400M Atlas",
+    # "A3ST": 'Airbus A300-600ST "Super Transporter" / "Beluga"',
+    # "A400": "Airbus A400M Atlas",
     "B37M": "Boeing 737 MAX 7",
     "B38M": "Boeing 737 MAX 8",
     "B39M": "Boeing 737 MAX 9",
@@ -400,27 +401,57 @@ TYPE_CODE_MAP_SIMPLE: Dict[str, str] = {
     "B788": "Boeing 787-8",
     "B789": "Boeing 787-9",
     "B78X": "Boeing 787-10",
-    "BCS1": "Airbus A220-100",
-    "BCS3": "Airbus A220-300",
-    "CRJ1": "Canadair Regional Jet 100",
-    "CRJ2": "Canadair Regional Jet 200",
-    "CRJ7": "Canadair Regional Jet 700 | Regional Jet 550",
-    "CRJ9": "Canadair Regional Jet 900",
-    "CRJX": "Canadair Regional Jet 1000",
-    "E110": "Embraer EMB 110 Bandeirante",
-    "E120": "Embraer EMB 120 Brasilia",
-    "E135": "Embraer RJ135",
-    "E145": "Embraer RJ145",
-    "E170": "Embraer 170",
-    "E190": "Embraer 190 / Lineage 1000",
-    "E195": "Embraer 195",
-    "E290": "Embraer E190-E2",
-    "E295": "Embraer E195-E2",
-    "E35L": "Embraer Legacy 600 / Legacy 650",
-    "E50P": "Embraer Phenom 100",
-    "E545": "Embraer Legacy 450 / Praetor 500",
-    "E550": "Embraer Legacy 500 / Praetor 600",
-    "E55P": "Embraer Phenom 300",
-    "E75L": "Embraer 175 (long wing)",
-    "E75S": "Embraer 175 (short wing)",
+    "BCS1": "Airbus A220-100",  # Bombardier C-series
+    "BCS3": "Airbus A220-300",  # Bombardier C-series
+    # "CRJ1": "Canadair Regional Jet 100",
+    # "CRJ2": "Canadair Regional Jet 200",
+    # "CRJ7": "Canadair Regional Jet 700 | Regional Jet 550",
+    # "CRJ9": "Canadair Regional Jet 900",
+    # "CRJX": "Canadair Regional Jet 1000",
+    # "E110": "Embraer EMB 110 Bandeirante",
+    # "E120": "Embraer EMB 120 Brasilia",
+    # "E135": "Embraer RJ135",
+    # "E145": "Embraer RJ145",
+    # "E170": "Embraer 170",
+    # "E190": "Embraer 190 / Lineage 1000",
+    # "E195": "Embraer 195",
+    # "E290": "Embraer E190-E2",
+    # "E295": "Embraer E195-E2",
+    # "E35L": "Embraer Legacy 600 / Legacy 650",
+    # "E50P": "Embraer Phenom 100",
+    # "E545": "Embraer Legacy 450 / Praetor 500",
+    # "E550": "Embraer Legacy 500 / Praetor 600",
+    # "E55P": "Embraer Phenom 300",
+    # "E75L": "Embraer 175 (long wing)",
+    # "E75S": "Embraer 175 (short wing)",
 }
+
+
+PANDAS_DTYPE: Dict[str, Any] = {
+    "callsign": str,
+    "number": str,
+    "icao24": str,
+    "registration": str,
+    "typecode": str,
+    "origin": str,
+    "destination": str,
+    # "firstseen": datetime,
+    # "lastseen": datetime,
+    # "day": datetime,
+    "latitude_1": float,
+    "longitude_1": float,
+    "altitude_1": float,
+    "latitude_2": float,
+    "longitude_2": float,
+    "altitude_2": float,
+    "airplane_type": str,
+    "callsign_txt": str,
+    "route": str,
+    "great_circle_distance": float,
+}
+
+PANDAS_DATETIME: List[str] = [
+    "firstseen",
+    "lastseen",
+    "day",
+]
