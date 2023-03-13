@@ -22,8 +22,6 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
     confusion_matrix,
     classification_report,
-    balanced_accuracy_score,
-    f1_score,
 )
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 
@@ -72,8 +70,8 @@ class Model:
     x_feature_floats: List[str] = ["great_circle_distance"]
     x_feature_strings: List[str] = [
         "callsign_txt",
-        "origin",
-        "destination",
+        # "origin",
+        # "destination",
         "route",
     ]
     x_feature_names: List[str] = x_feature_floats + x_feature_strings
@@ -98,7 +96,7 @@ class Model:
         # Read in data.
         df_xy: pd.DataFrame = pd.read_csv(prepared_dataset, usecols=xy_list)
         self.df_xy = df_xy.dropna()  # Remove NaN for now, worry later
-        self.df_xy = self.df_xy.iloc[:12000, :]  # Downsample due to memory issues
+        self.df_xy = self.df_xy.iloc[:6000, :]  # Downsample due to memory issues
         # 12000 for all columns, one file
         # 100,000 for floats and one other category
 
@@ -117,7 +115,7 @@ class Model:
 
         # Split into training and test sets
         x_train, x_test, y_train, y_test = train_test_split(
-            self.x_array, self.y_array, test_size=0.10
+            self.x_array, self.y_array, test_size=0.10, stratify=self.y_array
         )
         self.x_train: np.ndarray = x_train
         self.x_test: np.ndarray = x_test
@@ -179,15 +177,16 @@ class Model:
         x_class_names: List[str] = float_names + string_names
         return x_class_names
 
-    def main(self) -> None:
+    def main(self, **hyper_kwargs) -> None:
         """Main."""
-        self.define_model()
+        self.define_model(**hyper_kwargs)
         print("~~~ Fitting model ~~~")
         self.fit_model()  # Fit Model and visualize tree
         print("~~~ Evaluating model ~~~")
         self.evaluate_model()  # Test/Predict with model, set self.y_predict
         self.summarize_model()  # Summarize model
         # Save, Pickling, exporting?
+        print("~~~ Done Model.main ~~~")
 
     def savefig(self, ptype: str, **kwargs) -> None:
         """Save Figure."""
@@ -260,21 +259,19 @@ class Model:
             # Export Feature Importances
             f_out.write("Feature Importances: \n")
             f_out.write(",".join(self.x_names) + "\n")
-            txt = np.array2string(
-                self.model.feature_importances_,
-                separator=",",
-                max_line_width=np.inf,
-            )
+            txt_list: List[float] = self.model.feature_importances_.tolist()
+            f_out.write(",".join([str(i) for i in txt_list]) + "\n")
             f_out.write(txt + "\n")
 
             # Export Feature Importances
             f_out.write("Confusion matrix diagonal: \n")
-            txt = np.array2string(y_labels, separator=",", max_line_width=np.inf)
-            f_out.write(txt + "\n")
-            txt = np.array2string(
-                cf_mat.diagonal(), separator=",", max_line_width=np.inf
-            )
-            f_out.write(txt + "\n")
+            txt_list = y_labels.tolist()
+            f_out.write(",".join([str(i) for i in txt_list]) + "\n")
+            txt_list = cf_mat.diagonal().tolist()
+            f_out.write(",".join([str(i) for i in txt_list]) + "\n")
+
+            # Write out model info and hyper-parameters
+            f_out.write(str(self.model) + "\n")
 
 
 class DecisionTreeModel(Model):
@@ -282,22 +279,41 @@ class DecisionTreeModel(Model):
 
     name = "decision_tree"
 
-    def define_model(self) -> None:
+    def define_model(self, **kwargs) -> None:
         """Set model and model parameters."""
-        self.model: tree.DecisionTreeClassifier = tree.DecisionTreeClassifier(
+        hyper_kwargs: Dict[str, Any] = {
             # criterion="gini",  # Default
             # splitter="best",  # Default
-            max_depth=7,  # 3 to test training, and don't let tree be too big
-            min_samples_split=2,  # Min number of samples for splitting, int or float
+            "max_depth": 10,  # Max tree depth.
+            "min_samples_split": 0.04762,  # Min number of samples for splitting
             # min_samples_leaf=1,  # Don't use if using weights
-            min_weight_fraction_leaf=0.05,  # Minimum weight in a leaf. Guessing for now.
-            # max_features=None,  # Default; I don't get the tradeoffs
+            "min_weight_fraction_leaf": 0.00953,  # Minimum weight in a leaf
+            # max_features=None,  # Default
             # random_state=None,  # Default
             # max_leaf_nodes=None,  # Default
-            # min_impurity_decrease=0.0,  # Should try to use.
-            class_weight="balanced",
-            # ccp_alpha=0.0,  # Unsure
+            # "min_impurity_decrease": 0.0,  # Didn't help in practice
+            "class_weight": "balanced",  # Use
+            # "ccp_alpha": 0.0,  # Didn't help in practice
+        }
+
+        k: str
+        val: Any
+        for k, val in kwargs.items():  # Update in args with correct type
+            if k == "max_depth":
+                hyper_kwargs[k] = int(val)
+            elif k == "min_samples_split":
+                hyper_kwargs[k] = float(val)
+            elif k == "min_weight_fraction_leaf":
+                hyper_kwargs[k] = float(val)
+            elif k == "min_impurity_decrease":
+                hyper_kwargs[k] = float(val)
+            elif k == "ccp_alpha":
+                hyper_kwargs[k] = float(val)
+
+        self.model: tree.DecisionTreeClassifier = tree.DecisionTreeClassifier(
+            **hyper_kwargs,
         )
+        print(f"Model defined: {self.model}")
 
     def fit_model(self) -> None:
         """Fit and visualize."""
@@ -317,80 +333,239 @@ class DecisionTreeModel(Model):
         # fig.set_figheight(20)
         self.savefig("tree", dpi=2400)  # High res to see tree
 
-    def optimize(self, hparams) -> float:
-        """Optimize model. Build model, evaluate and return hyperopt dict."""
+    def optimize(self, hp_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize model. Build model, evaluate and return hyperopt dict.
 
-        print("Hyper-parameter combination: {}".format(hparams))
+        Args:
+            hp_kwargs: Hyper parameter kwarg dict passed to model constructor.
 
-        self.model: tree.DecisionTreeClassifier = tree.DecisionTreeClassifier(
-            max_depth=int(hparams["max_depth"]),
-            min_weight_fraction_leaf=float(hparams["min_wt_fr_leaf"]),
+        Return:
+            Hyper Opt Dictionary
+        """
+
+        print(f"Hyper-parameter combination: {hp_kwargs}")
+
+        self.define_model(**hp_kwargs)
+
+        # Use cross_val_score to optimize
+        # score_fxn: None = None  # Default for DecisionTree is average 'accuracy'
+        score_fxn: str = "f1_weighted"
+        # score_fxn: str = "balanced_accuracy"  # Didn't give good results
+        # Although cv=# defaults to StratifiedKFolds, I want to be explicit
+        skf: StratifiedKFold = StratifiedKFold(n_splits=5)
+        # If optimizing with hyperopt.fmin, we want the lowest score, multiply by -1
+        cvs: np.ndarray = -1 * cross_val_score(
+            self.model, self.x_train, self.y_train, cv=skf, scoring=score_fxn
         )
 
-        # arr1, arr2 = np.unique(self.y_array, return_counts=True)
-        # thing = {i: j for i, j in zip(arr1, arr2)}
-        cvs: np.ndarray = cross_val_score(self.model, self.x_train, self.y_train, cv=2)
+        std_dev: float = np.std(cvs)
         score: float = np.mean(cvs)
-        # score: float = np.mean(
-        #     StratifiedKFold(self.model, self.x_train, self.y_train, cv=2)
-        # )
-        print("Cross-validated MSE: {}".format(score))
-        # score: float = -f1_score(self.y_test, self.y_predict, average="weighted")
+        print(f"Mean Score: {score} with Std. Dev. of {std_dev}")
         return {"loss": score, "status": STATUS_OK, "model": self.model}
+
+    def run_optimizer(self, run_main_after: bool = False) -> None:
+        """Optimize Hyper-Parameters."""
+        # fmt: off
+        hyperspace: Dict[str, Any] = {
+            "max_depth": hp.quniform("max_depth", 2, 10, 1),
+            "min_weight_fraction_leaf": hp.uniform("min_weight_fraction_leaf", 0.0, 0.1),
+            "min_samples_split": hp.uniform("min_samples_split", 0, 0.1),
+            # "min_impurity_decrease": hp.uniform("min_impurity_decrease", 0.0, 0.4),  # Small knob in practice
+            # "ccp_alpha": hp.uniform("ccp_alpha", 0, 0.5),  # Small knob in practice
+        }
+        # fmt: on
+        trials: Trials = Trials()
+        best = fmin(
+            fn=self.optimize,
+            space=hyperspace,
+            algo=tpe.suggest,
+            max_evals=100,
+            trials=trials,
+        )
+
+        losses: np.ndarray = np.array(trials.losses())
+        plt.plot(losses)
+        plt.title(f"Hyperopt loss minimization for {self.name}")
+        plt.ylabel("Loss (f1_weighted)")
+        plt.xlabel("Trial")
+        self.savefig("optimization")
+        # trials.result[0]  # Observe
+        print(f"Hyperopt Best result!: {best}")
+
+        if run_main_after:
+            self.main(**best)
 
 
 class RandomForestModel(Model):
     """Random Forest Model."""
 
-    def main(self) -> None:
-        """Main."""
+    name = "random_forest"
 
-        model: ensemble.RandomForestClassifier = ensemble.RandomForestClassifier(
-            min_samples_split=5, max_depth=10
+    def define_model(self, **kwargs) -> None:
+        """Set model and model parameters."""
+        hyper_kwargs: Dict[str, Any] = {
+            "n_estimators": 100,  # Default
+            "max_depth": 10,  # Max tree depth.
+            "min_samples_split": 0.00230429,  # Min number of samples for splitting
+            # min_samples_leaf=1,  # Don't use if using weights
+            "min_weight_fraction_leaf": 0.0009224,  # Minimum weight in a leaf
+            # max_features=None,  # Default
+            # random_state=None,  # Default
+            # max_leaf_nodes=None,  # Default
+            # min_impurity_decrease=0.0,  # Should try to use.
+            "class_weight": "balanced",  # Use
+            # ccp_alpha=0.0,  # Unsure
+        }
+
+        k: str
+        val: Any
+        for k, val in kwargs.items():
+            if k == "max_depth":
+                hyper_kwargs[k] = int(val)
+            elif k == "min_samples_split":
+                hyper_kwargs[k] = float(val)
+            elif k == "min_weight_fraction_leaf":
+                hyper_kwargs[k] = float(val)
+
+        self.model: ensemble.RandomForestClassifier = ensemble.RandomForestClassifier(
+            **hyper_kwargs,
         )
+
+        print(f"Model defined: {self.model}")
+
+    def fit_model(self) -> None:
+        """Fit and visualize."""
+        super().fit_model()
+        # print("Feature Importances: ")
+        # print(self.model.feature_importances_)
+
+        # Visualize
+        tree.plot_tree(
+            self.model,
+            feature_names=self.x_names,
+            class_names=self.y_names,
+            impurity=True,
+        )
+        # fig: plt.figure = plt.gcf()
+        # fig.set_figwidth(20)
+        # fig.set_figheight(20)
+        self.savefig("tree", dpi=2400)  # High res to see tree
+
+    def optimize(self, hp_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize model. Build model, evaluate and return hyperopt dict.
+
+        Args:
+            hp_kwargs: Hyper parameter kwarg dict passed to model constructor.
+
+        Return:
+            Hyper Opt Dictionary
+        """
+
+        # print(f"Hyper-parameter combination: {hp_kwargs}")
+
+        # self.define_model(**hp_kwargs)
+
+        # # Use cross_val_score to optimize
+        # # score_fxn: None = None  # Default for DecisionTree is average 'accuracy'
+        # score_fxn: str = "f1_weighted"
+        # # score_fxn: str = "balanced_accuracy"  # Didn't give good results
+        # # Although cv=# defaults to StratifiedKFolds, I want to be explicit
+        # skf: StratifiedKFold = StratifiedKFold(n_splits=5)
+        # # If optimizing with hyperopt.fmin, we want the lowest score, multiply by -1
+        # cvs: np.ndarray = -1 * cross_val_score(
+        #     self.model, self.x_train, self.y_train, cv=skf, scoring=score_fxn
+        # )
+
+        # std_dev: float = np.std(cvs)
+        # score: float = np.mean(cvs)
+        # print(f"Mean Score: {score} with Std. Dev. of {std_dev}")
+        # return {"loss": score, "status": STATUS_OK, "model": self.model}
+
+    def run_optimizer(self, run_main_after: bool = False) -> None:
+        """Optimize Hyper-Parameters."""
+        # # fmt: off
+        # hyperspace: Dict[str, Any] = {
+        #     "max_depth": hp.quniform("max_depth", 2, 20, 1),
+        #     "min_weight_fraction_leaf": hp.uniform("min_weight_fraction_leaf", 0.0, 0.1),
+        #     "min_samples_split": hp.uniform("min_samples_split", 0, 0.1),
+        #     "min_impurity_decrease": hp.uniform("min_impurity_decrease", 0.0, 0.4),
+        #     "ccp_alpha": hp.uniform("ccp_alpha", 0, 0.5),
+        # }
+        # # fmt: on
+        # trials: Trials = Trials()
+        # best = fmin(
+        #     fn=self.optimize,
+        #     space=hyperspace,
+        #     algo=tpe.suggest,
+        #     max_evals=100,
+        #     trials=trials,
+        # )
+
+        # losses: np.ndarray = np.array(trials.losses())
+        # plt.plot(losses)
+        # plt.title(f"Hyperopt loss minimization for {self.name}")
+        # plt.ylabel("Loss (f1_weighted)")
+        # plt.xlabel("Trial")
+        # self.savefig("optimization")
+        # # trials.result[0]  # Observe
+        # print(f"Hyperopt Best result!: {best}")
+
+        # if run_main_after:
+        #     self.main(**best)
 
 
 class ExtremelyRandomTrees(Model):
     """Random Forest Model."""
 
-    def main(self) -> None:
-        """Main."""
+    name = "extremely_random_trees"
 
+    def define_model(self, **kwargs) -> None:
+        """Set model and model parameters."""
+        hyper_kwargs: Dict[str, Any] = {
+            # criterion="gini",  # Default
+            # splitter="best",  # Default
+            "max_depth": 18,  # Max tree depth.
+            "min_samples_split": 0.00230429,  # Min number of samples for splitting
+            # min_samples_leaf=1,  # Don't use if using weights
+            "min_weight_fraction_leaf": 0.0009224,  # Minimum weight in a leaf
+            # max_features=None,  # Default
+            # random_state=None,  # Default
+            # max_leaf_nodes=None,  # Default
+            # min_impurity_decrease=0.0,  # Should try to use.
+            "class_weight": "balanced",  # Use
+            # ccp_alpha=0.0,  # Unsure
+        }
+
+        k: str
+        val: Any
+        for k, val in kwargs.items():
+            if k == "max_depth":
+                hyper_kwargs[k] = int(val)
+            elif k == "min_samples_split":
+                hyper_kwargs[k] = float(val)
+            elif k == "min_weight_fraction_leaf":
+                hyper_kwargs[k] = float(val)
+
+        self.model: ensemble.RandomForestClassifier = ensemble.RandomForestClassifier(
+            **hyper_kwargs,
+        )
         model: ensemble.ExtraTreesClassifier = ensemble.ExtraTreesClassifier(
             min_samples_split=5, max_depth=10
         )
 
 
-def run_optimizer() -> None:
-    """Optimize Hyper-Parameters."""
-    dt: DecisionTreeModel = DecisionTreeModel(dataset)
-    # dt.define_model()
-    # self.fit_model()  # Fit Model and visualize tree
-    # print("~~~ Evaluating model ~~~")
-    # self.evaluate_model()  # Test/Predict with model, set self.y_predict
-    hyperspace: Dict[str, Any] = {
-        "max_depth": hp.quniform("max_depth", 2, 10, 1),
-        "min_wt_fr_leaf": hp.quniform("min_weight_fraction_leaf", 0.0, 0.5, 0.05),
-    }
-    trials: Trials = Trials()
-    best = fmin(
-        fn=dt.optimize,
-        space=hyperspace,
-        algo=tpe.suggest,
-        max_evals=10,
-        trials=trials,
-    )
-
-    # # Testing
-    # dt.optimize({"max_depth": 6.0, "min_wt_fr_leaf": 0.35000000000000003})
-
-    breakpoint()
-
-
 if __name__ == "__main__":
-    # dataset: Path = DATA_DIR / "prepared_data.csv"
-    dataset: Path = DATA_DIR / "prepared_data_short.csv"
+    dataset: Path = DATA_DIR / "prepared_data.csv"
+    # dataset: Path = DATA_DIR / "prepared_data_short.csv"
 
-    # run_optimizer()
-    decision_tree: DecisionTreeModel = DecisionTreeModel(dataset)
-    decision_tree.main()
+    # decision_tree: DecisionTreeModel = DecisionTreeModel(dataset)
+    # decision_tree.run_optimizer(run_main_after=True)
+    # decision_tree.main()
+
+    random_forest: RandomForestModel = RandomForestModel(dataset)
+    # random_forest.run_optimizer()
+    random_forest.main()
+
+    # extreme_random: ExtremelyRandomTrees = ExtremelyRandomTrees(dataset)
+    # extreme_random.run_optimizer()
+    # # extreme_random.main()

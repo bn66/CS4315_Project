@@ -12,6 +12,7 @@ from common import (  # pylint: disable=unused-import
     PLOT_DIR,
     TYPE_CODE_MAP,
     TYPE_CODE_MAP_SIMPLE,
+    TYPE_CODE_BOEING_OVERLAP,
     PANDAS_DTYPE,
     PANDAS_DATETIME,
 )
@@ -73,10 +74,10 @@ def _add_airplane_type(df_data: pd.DataFrame) -> None:
     typecode: str
     for typecode in series_typecode:
         value: str
-        if typecode not in TYPE_CODE_MAP_SIMPLE:
+        if typecode not in TYPE_CODE_BOEING_OVERLAP:
             value = ""
         else:
-            value = TYPE_CODE_MAP_SIMPLE[typecode]
+            value = TYPE_CODE_BOEING_OVERLAP[typecode]
         airplane_types.append(value)
 
     df_data["airplane_type"] = airplane_types

@@ -130,3 +130,11 @@ dmypy.json
 
 # Virtual Environment
 .venv_cs3415/
+
+# Standard Generated Files
+data/flightlist_20190101_20190131.csv
+data/flightlist_short.csv
+data/prepared_data.csv
+data/prepared_data_short.csv
+data/scraped_data.csv
+data/scraped_data_errors.txt
