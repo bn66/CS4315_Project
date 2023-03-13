@@ -22,6 +22,7 @@ dependencies = [
     "tensorflow",
     "selenium",
     "matplotlib",
+    "hyperopt",
 ]
 dynamic = ["version"]
 

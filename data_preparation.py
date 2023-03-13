@@ -7,7 +7,7 @@ from numpy import radians, cos, sin, arcsin, sqrt
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from common import (
+from common import (  # pylint: disable=unused-import
     DATA_DIR,
     PLOT_DIR,
     TYPE_CODE_MAP,
@@ -292,13 +292,11 @@ class Visualize:
 
     def main(self) -> None:
         """Visualize DataSet Data."""
-        # # Plot great circle distances on scatter plot
-        # self.plot_scatter_y_vs_gcm()
+        # Plot great circle distances on scatter plot
+        self.plot_scatter_y_vs_gcm()
 
         # Plot histograms of all columns
         self.plot_histograms_all()
-
-        breakpoint()
 
 
 if __name__ == "__main__":
