@@ -434,8 +434,8 @@ TYPE_CODE_BOEING_OVERLAP: Dict[str, str] = {
     "B703": "Boeing 707",
     "B712": "Boeing 717",
     "B720": "Boeing 720",
-    "B721": "Boeing 727",
-    "B722": "Boeing 727",
+    # "B721": "Boeing 727",  # Only two samples and seriously imbalanced
+    # "B722": "Boeing 727",
     "B732": "Boeing 737",
     "B733": "Boeing 737",
     "B734": "Boeing 737",

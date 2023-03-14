@@ -72,7 +72,7 @@ class Model:
         "callsign_txt",
         # "origin",
         # "destination",
-        "route",
+        # "route",
     ]
     x_feature_names: List[str] = x_feature_floats + x_feature_strings
 
@@ -95,10 +95,19 @@ class Model:
 
         # Read in data.
         df_xy: pd.DataFrame = pd.read_csv(prepared_dataset, usecols=xy_list)
-        self.df_xy = df_xy.dropna()  # Remove NaN for now, worry later
-        self.df_xy = self.df_xy.iloc[:6000, :]  # Downsample due to memory issues
-        # 12000 for all columns, one file
-        # 100,000 for floats and one other category
+        df_xy = df_xy.dropna()  # Remove NaN for now, worry later
+
+        # Downsample due to potential memory issues
+        df_x = df_xy.loc[:, self.x_feature_names]
+        df_y = df_xy.loc[:, self.y_label_name]
+        pct: float = 0.5  # Percentage to use in model
+        self.df_xy: pd.DataFrame
+        if pct < 1.00:
+            _, x2, _, y2 = train_test_split(df_x, df_y, test_size=pct, stratify=df_y)
+            print(f"Downsampling to {len(x2)}/{len(df_x)}: {pct:.2%} datapoints!")
+            self.df_xy = pd.concat([x2, y2], axis=1)
+        else:
+            self.df_xy = df_xy
 
         # Store X/Y Data Frames
         self.x_features: pd.DataFrame = self.df_xy.iloc[:, :-1]
@@ -505,13 +514,13 @@ if __name__ == "__main__":
     # dataset: Path = DATA_DIR / "prepared_data_short.csv"
 
     decision_tree: DecisionTreeModel = DecisionTreeModel(dataset)
-    decision_tree.set_then_run_optimizer(run_main_after=True)
-    # decision_tree.main()
+    # decision_tree.set_then_run_optimizer(run_main_after=True)
+    decision_tree.main()
 
-    random_forest: RandomForestModel = RandomForestModel(dataset)
-    random_forest.set_then_run_optimizer(run_main_after=True)
-    # random_forest.main()
+    # random_forest: RandomForestModel = RandomForestModel(dataset)
+    # random_forest.set_then_run_optimizer(run_main_after=True)
+    # # random_forest.main()
 
-    extreme_random: ExtremelyRandomTrees = ExtremelyRandomTrees(dataset)
-    extreme_random.set_then_run_optimizer(run_main_after=True)
-    # # extreme_random.main()
+    # extreme_random: ExtremelyRandomTrees = ExtremelyRandomTrees(dataset)
+    # extreme_random.set_then_run_optimizer(run_main_after=True)
+    # # # extreme_random.main()
