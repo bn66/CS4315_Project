@@ -100,7 +100,7 @@ class Model:
         # Downsample due to potential memory issues
         df_x = df_xy.loc[:, self.x_feature_names]
         df_y = df_xy.loc[:, self.y_label_name]
-        pct: float = 0.5  # Percentage to use in model
+        pct: float = 0.65  # Percentage to use in model
         self.df_xy: pd.DataFrame
         if pct < 1.00:
             _, x2, _, y2 = train_test_split(df_x, df_y, test_size=pct, stratify=df_y)
@@ -322,7 +322,7 @@ class Model:
             fn=self.optimize,
             space=hyperspace,
             algo=tpe.suggest,
-            max_evals=100,
+            max_evals=50,
             trials=trials,
         )
 
@@ -514,13 +514,13 @@ if __name__ == "__main__":
     # dataset: Path = DATA_DIR / "prepared_data_short.csv"
 
     decision_tree: DecisionTreeModel = DecisionTreeModel(dataset)
-    # decision_tree.set_then_run_optimizer(run_main_after=True)
-    decision_tree.main()
+    decision_tree.set_then_run_optimizer(run_main_after=True)
+    # decision_tree.main()
 
-    # random_forest: RandomForestModel = RandomForestModel(dataset)
-    # random_forest.set_then_run_optimizer(run_main_after=True)
+    random_forest: RandomForestModel = RandomForestModel(dataset)
+    random_forest.set_then_run_optimizer(run_main_after=True)
     # # random_forest.main()
 
-    # extreme_random: ExtremelyRandomTrees = ExtremelyRandomTrees(dataset)
-    # extreme_random.set_then_run_optimizer(run_main_after=True)
+    extreme_random: ExtremelyRandomTrees = ExtremelyRandomTrees(dataset)
+    extreme_random.set_then_run_optimizer(run_main_after=True)
     # # # extreme_random.main()
